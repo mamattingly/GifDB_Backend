@@ -106,3 +106,10 @@ This project can fetch 10 trending GIFs from Tenor each day and replace the prev
 Generate a secret with a password manager or a command such as `openssl rand -hex 32`. Never put the Tenor key or refresh token in frontend code or commit real secrets to Git.
 
 The scheduled refresh uses Tenor's featured/trending endpoint with medium content filtering. It only replaces the library after it has downloaded and validated all ten GIF files. If the API key is missing or the source cannot provide ten valid GIFs, the old library is kept.
+
+
+## Automatic refresh on server startup
+
+The API now starts a Tenor refresh in the background every time the Express server process starts. It downloads 10 GIFs and replaces the library only after the full batch has downloaded successfully. If the Tenor API key is missing or a download fails, the current library is preserved and the error is logged.
+
+Required Render web-service environment variable: `TENOR_API_KEY`. Set `STARTUP_GIF_REFRESH=false` only if you want to disable this startup behavior. The daily Render Cron Job can remain enabled too; it continues to refresh the library on its daily schedule.

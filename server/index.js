@@ -206,7 +206,17 @@ if (existsSync(DIST_DIR)) {
 
 const PORT = Number(process.env.PORT || 3001);
 app.listen(PORT, () => {
-  console.log(`GIF host running on http://localhost:${PORT}`);
+  console.log(`GIF host running on port ${PORT}`);
+
+  // Refresh the library once whenever the server process starts. This runs
+  // in the background so the API becomes available immediately. If Tenor is
+  // not configured or the refresh fails, the existing library is preserved.
+  if (process.env.STARTUP_GIF_REFRESH !== "false") {
+    console.log("Starting automatic GIF refresh on server startup...");
+    refreshDailyGifs()
+      .then((created) => console.log(`Startup GIF refresh complete: ${created.length} GIFs loaded.`))
+      .catch((error) => console.error("Startup GIF refresh failed; keeping the existing library:", error.message));
+  }
 });
 
 function sanitizeName(name) {
