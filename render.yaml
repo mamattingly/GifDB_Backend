@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: personal-gif-host-api
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    disk:
+      name: personal-gif-host-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: MAX_FILE_SIZE
+        value: 15728640
