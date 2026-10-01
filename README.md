@@ -92,3 +92,17 @@ https://your-domain.example/gifs/12345678-....gif
 Use the site's own hosted URL when sharing content you are authorized to host. Whether Teams renders a particular image inline depends on your organization's Teams configuration, link handling, authentication requirements, and network policies.
 
 This project does not attempt to bypass organizational network controls or security policies.
+
+## Automatically replace the library with 10 new GIFs daily
+
+This project can fetch 10 trending GIFs from Tenor each day and replace the previous library. **This deletes all existing library GIFs, including manually uploaded GIFs, after ten replacements have downloaded successfully.**
+
+1. Create a Tenor API key in Google's developer console for the Tenor API.
+2. Deploy the updated `render.yaml` as a Render Blueprint. It defines both the Express web service and a daily cron job (12:00 UTC).
+3. In the web service environment, set `TENOR_API_KEY` to your Tenor key and `DAILY_REFRESH_TOKEN` to a long random secret.
+4. In the cron service environment, set `API_BASE_URL` to the public Render web-service URL (for example `https://personal-gif-host-api.onrender.com`) and set `DAILY_REFRESH_TOKEN` to the exact same secret as the web service.
+5. Redeploy both services. The cron job calls the protected refresh endpoint once per day.
+
+Generate a secret with a password manager or a command such as `openssl rand -hex 32`. Never put the Tenor key or refresh token in frontend code or commit real secrets to Git.
+
+The scheduled refresh uses Tenor's featured/trending endpoint with medium content filtering. It only replaces the library after it has downloaded and validated all ten GIF files. If the API key is missing or the source cannot provide ten valid GIFs, the old library is kept.

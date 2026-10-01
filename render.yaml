@@ -15,3 +15,21 @@ services:
         value: 20
       - key: MAX_FILE_SIZE
         value: 15728640
+      - key: TENOR_API_KEY
+        sync: false
+      - key: DAILY_REFRESH_TOKEN
+        sync: false
+
+  - type: cron
+    name: personal-gif-host-daily-refresh
+    runtime: node
+    schedule: "0 12 * * *"
+    buildCommand: npm install
+    startCommand: node scripts/daily-refresh.js
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: API_BASE_URL
+        sync: false
+      - key: DAILY_REFRESH_TOKEN
+        sync: false

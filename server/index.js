@@ -55,6 +55,78 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+// Authenticated endpoint called by a daily Render Cron Job.
+// Fetch ten trending GIFs from Tenor, then replace the old library only
+// after all ten files have downloaded successfully.
+app.post("/api/admin/daily-refresh", async (req, res) => {
+  const token = process.env.DAILY_REFRESH_TOKEN;
+  if (!token) return res.status(503).json({ error: "DAILY_REFRESH_TOKEN is not configured." });
+  const auth = req.get("authorization") || "";
+  if (auth !== `Bearer ${token}`) return res.status(401).json({ error: "Unauthorized." });
+  try {
+    const created = await refreshDailyGifs();
+    res.json({ status: "ok", added: created.length, deletedOld: true, gifs: created });
+  } catch (error) {
+    console.error("Daily GIF refresh failed:", error);
+    res.status(502).json({ error: error.message || "Daily GIF refresh failed." });
+  }
+});
+
+async function refreshDailyGifs() {
+  const apiKey = process.env.TENOR_API_KEY;
+  if (!apiKey) throw new Error("TENOR_API_KEY is not configured.");
+
+  const endpoint = new URL("https://tenor.googleapis.com/v2/featured");
+  endpoint.searchParams.set("key", apiKey);
+  endpoint.searchParams.set("client_key", "personal_gif_host");
+  endpoint.searchParams.set("limit", "10");
+  endpoint.searchParams.set("media_filter", "gif");
+  endpoint.searchParams.set("contentfilter", "medium");
+
+  const response = await fetch(endpoint);
+  if (!response.ok) throw new Error(`Tenor API returned HTTP ${response.status}.`);
+  const payload = await response.json();
+  const results = (payload.results || []).filter(item => item.media_formats?.gif?.url).slice(0, 10);
+  if (results.length < 10) throw new Error(`Tenor returned only ${results.length} usable GIFs; old library was kept.`);
+
+  const staging = [];
+  try {
+    for (const item of results) {
+      const gifResponse = await fetch(item.media_formats.gif.url);
+      if (!gifResponse.ok) throw new Error(`Could not download a GIF (HTTP ${gifResponse.status}); old library was kept.`);
+      const bytes = Buffer.from(await gifResponse.arrayBuffer());
+      if (bytes.length < 6 || bytes.subarray(0, 3).toString() !== "GIF") {
+        throw new Error("Tenor returned a file that was not a valid GIF; old library was kept.");
+      }
+      const id = crypto.randomUUID();
+      const filename = `${id}.gif`;
+      const filePath = path.join(GIF_DIR, filename);
+      await fs.writeFile(filePath, bytes, { flag: "wx" });
+      staging.push({
+        id,
+        name: sanitizeName(item.content_description || `daily-${id}.gif`),
+        size: bytes.length,
+        createdAt: new Date().toISOString(),
+        url: `/gifs/${filename}`,
+        source: "Tenor"
+      });
+    }
+
+    // Commit the new library, then remove files that are no longer referenced.
+    const oldGifs = await readDb();
+    await writeDb(staging);
+    const keep = new Set(staging.map(gif => path.basename(gif.url)));
+    for (const old of oldGifs) {
+      const filename = path.basename(old.url || "");
+      if (filename && !keep.has(filename)) await fs.unlink(path.join(GIF_DIR, filename)).catch(() => {});
+    }
+    return staging;
+  } catch (error) {
+    for (const gif of staging) await fs.unlink(path.join(GIF_DIR, path.basename(gif.url))).catch(() => {});
+    throw error;
+  }
+}
+
 app.get("/api/gifs", async (_req, res) => {
   try {
     const gifs = await readDb();
